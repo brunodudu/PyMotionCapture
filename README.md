@@ -1,5 +1,11 @@
 # VideoTracker
 
+Requisitos:
+- [Roboflow Inference Docker](https://inference.roboflow.com/quickstart/docker/) local.
+- `pip install inference-sdk`
+- `pip install opencv-python`
+- `pip install numpy`
+
 ## [Calib-1](Calib-1)
 Faz a calibração das câmeras individualmente. 
 
