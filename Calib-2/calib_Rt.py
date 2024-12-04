@@ -45,6 +45,7 @@ def reta3(K_inv, R_t, t, pixel):
 parser = argparse.ArgumentParser(description="Encontrar a matriz rotacao e a posicao relativa da fonte secundaria de video.")
 parser.add_argument("principal_source", type=str, help="Fonte principal do vídeo.")
 parser.add_argument("secundary_source", type=str, help="Fonte secundaria do vídeo.")
+parser.add_argument("camera_distance", type=str, help="Distancia entre as cameras.")
 args = parser.parse_args()
 
 # Determinar se a fonte é um índice de webcam ou um arquivo de vídeo
@@ -58,6 +59,11 @@ try:
     source_1 = int(args.secundary_source)  # Tenta converter para inteiro
 except ValueError:
     source_1 = args.secundary_source  # Se falhar, mantém como string (caminho do vídeo)
+
+try:
+    camera_distance = float(args.camera_distance)
+except ValueError:
+    camera_distance = args.camera_distance
 
 with open("results/shots_for_FundamentalMatrix.json", "r") as json_file:
     pre_results = np.array(json.load(json_file)) 
@@ -121,6 +127,8 @@ os.makedirs("results", exist_ok=True)
 with open(f"results/RotationMatrix.json", "w") as json_file:
     json.dump(R_f.tolist(), json_file)
 
+norm = np.linalg.norm(t_f)
+t_f = (camera_distance / norm) * t_f
 print(t_f)
 with open(f"results/PositionVector.json", "w") as json_file:
     json.dump(t_f.tolist(), json_file)

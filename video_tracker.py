@@ -163,7 +163,7 @@ def position_thread(stop_event):
             reta0 = reta3D(K_0_inv, np.transpose(R_0), t_0, pixel_0)
             reta1 = reta3D(K_1_inv, np.transpose(R_1), t_1, pixel_1)
             rec = ponto_medio_retas(reta0, reta1)
-            print(100*rec)
+            print(rec)
 
         key = cv2.waitKey(1)
         if key & 0xFF == ord('q'):
