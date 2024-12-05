@@ -5,10 +5,13 @@ import numpy as np
 import argparse
 import json
 
+with open("parameters.json", "r") as json_file:
+    parameters = json.load(json_file)
+    
 project_id = "balls-obj-det-3.0-euven"
 model_version = 2
-api_key = "S3lt1G4Wx3nBEACDxu9z"
-api_url = "http://localhost:9001"
+api_key = parameters["api_key"]
+api_url = parameters["api_url"]
 
 client = InferenceHTTPClient(api_url=api_url, api_key=api_key)
 

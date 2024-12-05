@@ -5,6 +5,7 @@ Requisitos:
 - `pip install inference-sdk`
 - `pip install opencv-python`
 - `pip install numpy`
+- Também é necessário criar um arquivo `parameters.json` com a URL do seu Roboflow Inference Docker e sua API_KEY. Exemplo: `{"api_key": "qwerty12345","api_url": "http://localhost:9001"}`
 
 ## [Calib-1](Calib-1)
 Faz a calibração das câmeras individualmente. 
