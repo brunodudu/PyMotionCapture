@@ -118,7 +118,8 @@ for R in (R1, R2):
     for t in (t1, t2):
         Y = reta3(K_1_inv, np.transpose(R), t, points_camera_1[0])
         rec = ponto_medio_retas(Y_0, Y)
-        if rec[2] > 0 and rec[2] > t[2]:
+        rec_sec = np.transpose(R) @ (rec - t)
+        if rec[2] > 0 and rec_sec[2] > 0:
             R_f = R
             t_f = t
 
