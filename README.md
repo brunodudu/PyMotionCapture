@@ -1,4 +1,4 @@
-# VideoTracker
+# PyMotionCapture
 
 Requisitos:
 - [Roboflow Inference Docker](https://inference.roboflow.com/quickstart/docker/) local.
@@ -30,11 +30,11 @@ Parâmetros:
 2. *{ID da webcam secundária} / {url do stream de video secundário} / {arquivo de video secundário}*
 3. *{Distância entre as câmeras na unidade de medida desejada}*
 
-## [video_tracker](video_tracker.py)
+## [motion_capture](motion_capture.py)
 Script principal.
 
 Parâmetros:
 1. *{ID da webcam principal} / {url do stream de video principal} / {arquivo de video principal}*
 2. *{ID da webcam secundária} / {url do stream de video secundário} / {arquivo de video secundário}*
 
-Exemplo: `python video_tracker.py 1 0` - webcam *1* como principal e *0* como secundária.
+Exemplo: `python motion_capture.py 1 0` - webcam *1* como principal e *0* como secundária.
