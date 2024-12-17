@@ -34,65 +34,37 @@ except ValueError:
     source_1 = args.secundary_source  # Se falhar, mantém como string (caminho do vídeo)
 
 with open(f"Calib-1/results/camera_matrix_{source_0}.json", "r") as json_file:
-    K_0 = np.array(json.load(json_file))
+    K_0 = np.array(json.load(json_file), dtype=np.float64)
 
 with open(f"Calib-1/results/camera_matrix_{source_1}.json", "r") as json_file:
-    K_1 = np.array(json.load(json_file))
+    K_1 = np.array(json.load(json_file), dtype=np.float64)
 
 R_0 = np.eye(3)
 t_0 = np.zeros(3)
 
 with open(f"Calib-2/results/RotationMatrix.json", "r") as json_file:
-    R_1 = np.array(json.load(json_file))
+    R_1 = np.array(json.load(json_file), dtype=np.float64)
 
 with open(f"Calib-2/results/PositionVector.json", "r") as json_file:
-    t_1 = np.array(json.load(json_file))
+    t_1 = np.array(json.load(json_file), dtype=np.float64)
 
 K_0_inv = np.linalg.inv(K_0)
 K_1_inv = np.linalg.inv(K_1)
 
 def ponto_medio_retas(reta1, reta2):
-    """
-    Calcula o ponto médio entre os pontos mais próximos de duas retas no espaço 3D.
+    p_a = reta1[0]
+    p_b = reta2[0]
+    v_a = reta1[1]
+    v_b = reta2[1]
+    v_axb = np.cross(v_a, v_b)
+
+    p = p_b - p_a
+    S = np.column_stack((v_a, - v_b, v_axb))
+    lamb = np.linalg.solve(S, p)
     
-    Parâmetros:
-    - p0_1: np.array, ponto de origem da reta 1
-    - v1: np.array, vetor diretor da reta 1
-    - p0_2: np.array, ponto de origem da reta 2
-    - v2: np.array, vetor diretor da reta 2
-    
-    Retorna:
-    - ponto_medio: np.array, ponto médio entre os pontos mais próximos das retas
-    """
-    # Vetor entre as origens
-    w0 = reta2[0] - reta1[0]
-    
-    # Produto escalar entre os vetores diretores
-    a = np.dot(reta1[1], reta1[1])  # ||v1||^2
-    b = np.dot(reta1[1], reta2[1])  # v1 . v2
-    c = np.dot(reta2[1], reta2[1])  # ||v2||^2
-    d = np.dot(reta1[1], w0)  # v1 . w0
-    e = np.dot(reta2[1], w0)  # v2 . w0
-    
-    # Determinante
-    denom = a * c - b * b
-    
-    # Evitar divisão por zero (caso as retas sejam paralelas)
-    if np.isclose(denom, 0):
-        raise ValueError("As retas são paralelas e não possuem ponto único de menor distância.")
-    
-    # Parâmetros t e s que minimizam a distância entre as retas
-    t = (b * e - c * d) / denom
-    s = (a * e - b * d) / denom
-    
-    # Pontos mais próximos em cada reta
-    ponto_r1 = reta1[0] + t * reta1[1]
-    ponto_r2 = reta2[0] + s * reta2[1]
-    
-    # Ponto médio
-    ponto_medio = (ponto_r1 + ponto_r2) / 2
-    
-    return ponto_medio
+    a = p_a + (lamb[0] * v_a)
+    b = p_b + (lamb[1] * v_b)
+    return (a + b)/2
 
 def reta3D(K_inv, R_t, t, pixel):
     pixel_RP2 = [pixel[0], pixel[1], 1 ]
@@ -117,6 +89,7 @@ def video_thread(source, string_display, stop_event):
     global model_version
     global result_threads
     global results_shots
+    global reproj
 
     cap = cv2.VideoCapture(source)
     while not stop_event.is_set():
@@ -145,6 +118,8 @@ def video_thread(source, string_display, stop_event):
                 desenhar_centro(image, int(prediction['x']), int(prediction['y']), (0, 0, 255))
                 result_threads[string_display] = (prediction['x'], prediction['y'])
 
+        if reproj[string_display][2] != 0:
+            desenhar_centro(image, int(reproj[string_display][0]), int(reproj[string_display][1]), (255, 0, 0))
         cv2.imshow(string_display, image)
 
         # Verifica se a tecla 's' foi pressionada para salvar os resultados
@@ -159,14 +134,26 @@ def video_thread(source, string_display, stop_event):
 
 def position_thread(stop_event):
     global result_threads
+    global reproj
     while not stop_event.is_set():
         pixel_0 = result_threads[f"Camera_{source_0}-principal"]
         pixel_1 = result_threads[f"Camera_{source_1}-secundaria"]
+        reproj_0 = np.zeros(3)
+        reproj_1 = np.zeros(3)
         if pixel_0 != (0, 0) and pixel_1 != (0, 0):
             reta0 = reta3D(K_0_inv, np.transpose(R_0), t_0, pixel_0)
             reta1 = reta3D(K_1_inv, np.transpose(R_1), t_1, pixel_1)
             rec = ponto_medio_retas(reta0, reta1)
-            print(rec)
+            reproj_0 = K_0 @ (np.concatenate((R_0, t_0[:, np.newaxis]), axis=1) @ np.transpose([rec[0], rec[1], rec[2], 1]))
+            reproj_0 = reproj_0 / reproj_0[2]
+            reproj_1 = K_1 @ (np.concatenate((R_1, t_1[:, np.newaxis]), axis=1) @ np.transpose([rec[0], rec[1], rec[2], 1]))
+            reproj_1 = reproj_1 / reproj_1[2]
+            reproj[f"Camera_{source_0}-principal"] = reproj_0
+            reproj[f"Camera_{source_1}-secundaria"] = reproj_1
+            print(f"Ponto:{rec}, Reproj_{source_0}:{reproj_0}, Reproj_{source_1}:{reproj_1}")
+        else:
+            reproj[f"Camera_{source_0}-principal"] = np.zeros(3)
+            reproj[f"Camera_{source_1}-secundaria"] = np.zeros(3)
 
         key = cv2.waitKey(1)
         if key & 0xFF == ord('q'):
@@ -181,6 +168,10 @@ result_threads = {
     f"Camera_{source_1}-secundaria": (0,0)
 }
 results_shots = []
+reproj = {
+    f"Camera_{source_0}-principal": (0,0,0),
+    f"Camera_{source_1}-secundaria": (0,0,0)
+}
 
 # Iniciando as threads para as câmeras
 thread_0 = threading.Thread(target=video_thread, args=(source_0, f"Camera_{source_0}-principal", stop_event))

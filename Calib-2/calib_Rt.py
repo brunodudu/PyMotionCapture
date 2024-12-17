@@ -5,37 +5,21 @@ import argparse
 import os
 
 def ponto_medio_retas(reta1, reta2):
-    # Vetor entre as origens
-    w0 = reta2[0] - reta1[0]
-    
-    # Produto escalar entre os vetores diretores
-    a = np.dot(reta1[1], reta1[1])  # ||v1||^2
-    b = np.dot(reta1[1], reta2[1])  # v1 . v2
-    c = np.dot(reta2[1], reta2[1])  # ||v2||^2
-    d = np.dot(reta1[1], w0)  # v1 . w0
-    e = np.dot(reta2[1], w0)  # v2 . w0
-    
-    # Determinante
-    denom = a * c - b * b
-    
-    # Evitar divisão por zero (caso as retas sejam paralelas)
-    if np.isclose(denom, 0):
-        raise ValueError("As retas são paralelas e não possuem ponto único de menor distância.")
-    
-    # Parâmetros t e s que minimizam a distância entre as retas
-    t = (b * e - c * d) / denom
-    s = (a * e - b * d) / denom
-    
-    # Pontos mais próximos em cada reta
-    ponto_r1 = reta1[0] + t * reta1[1]
-    ponto_r2 = reta2[0] + s * reta2[1]
-    
-    # Ponto médio
-    ponto_medio = (ponto_r1 + ponto_r2) / 2
-    
-    return ponto_medio
+    p_a = reta1[0]
+    p_b = reta2[0]
+    v_a = reta1[1]
+    v_b = reta2[1]
+    v_axb = np.cross(v_a, v_b)
 
-def reta3(K_inv, R_t, t, pixel):
+    p = p_b - p_a
+    S = np.column_stack((v_a, - v_b, v_axb))
+    lamb = np.linalg.solve(S, p)
+    
+    a = p_a + (lamb[0] * v_a)
+    b = p_b + (lamb[1] * v_b)
+    return (a + b)/2
+
+def reta3D(K_inv, R_t, t, pixel):
     pixel_RP2 = [pixel[0], pixel[1], 1 ]
     p0 = - R_t @ np.transpose(t)
     pv = R_t @ K_inv @ np.transpose(pixel_RP2)
@@ -69,10 +53,10 @@ with open("results/shots_for_FundamentalMatrix.json", "r") as json_file:
     pre_results = np.array(json.load(json_file)) 
 
 with open(f"../Calib-1/results/camera_matrix_{source_0}.json", "r") as json_file:
-    K_0 = np.array(json.load(json_file))
+    K_0 = np.array(json.load(json_file), dtype=np.float64)
 
 with open(f"../Calib-1/results/camera_matrix_{source_1}.json", "r") as json_file:
-    K_1 = np.array(json.load(json_file))
+    K_1 = np.array(json.load(json_file), dtype=np.float64)
 
 
 K_0_inv = np.linalg.inv(K_0)
@@ -87,8 +71,8 @@ for result in pre_results:
         points_camera_0.append(result[f'Camera_{source_0}'])
         points_camera_1.append(result[f'Camera_{source_1}'])
 
-points_camera_0 = np.array(points_camera_0, dtype=np.float32)
-points_camera_1 = np.array(points_camera_1, dtype=np.float32)
+points_camera_0 = np.array(points_camera_0, dtype=np.float64)
+points_camera_1 = np.array(points_camera_1, dtype=np.float64)
  
 F, mask = cv2.findFundamentalMat(points_camera_0, points_camera_1, method=cv2.FM_RANSAC)
 
@@ -112,13 +96,13 @@ t2 = -t1
 
 R_f = None
 t_f = None
-Y_0 = reta3(K_0_inv, np.eye(3), np.zeros(3), points_camera_0[0])
+Y_0 = reta3D(K_0_inv, np.eye(3), np.zeros(3), points_camera_0[0])
 
 for R in (R1, R2):
     for t in (t1, t2):
-        Y = reta3(K_1_inv, np.transpose(R), t, points_camera_1[0])
+        Y = reta3D(K_1_inv, np.transpose(R), t, points_camera_1[0])
         rec = ponto_medio_retas(Y_0, Y)
-        rec_sec = np.transpose(R) @ (rec - t)
+        rec_sec = np.transpose(R) @ np.transpose(rec - t)
         if rec[2] > 0 and rec_sec[2] > 0:
             R_f = R
             t_f = t
