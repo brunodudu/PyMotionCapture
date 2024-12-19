@@ -40,7 +40,7 @@ with open(f"Calib-1/results/camera_matrix_{source_1}.json", "r") as json_file:
     K_1 = np.array(json.load(json_file), dtype=np.float64)
 
 R_0 = np.eye(3)
-t_0 = np.zeros(3)
+t_0 = [[0],[0],[0]]
 
 with open(f"Calib-2/results/RotationMatrix.json", "r") as json_file:
     R_1 = np.array(json.load(json_file), dtype=np.float64)
@@ -56,10 +56,10 @@ def ponto_medio_retas(reta1, reta2):
     p_b = reta2[0]
     v_a = reta1[1]
     v_b = reta2[1]
-    v_axb = np.cross(v_a, v_b)
+    v_axb = np.cross(v_a.flatten(), v_b.flatten())
 
     p = p_b - p_a
-    S = np.column_stack((v_a, - v_b, v_axb))
+    S = np.column_stack((v_a.flatten(), - v_b.flatten(), v_axb.flatten()))
     lamb = np.linalg.solve(S, p)
     
     a = p_a + (lamb[0] * v_a)
@@ -67,9 +67,9 @@ def ponto_medio_retas(reta1, reta2):
     return (a + b)/2
 
 def reta3D(K_inv, R_t, t, pixel):
-    pixel_RP2 = [pixel[0], pixel[1], 1 ]
-    p0 = - R_t @ np.transpose(t)
-    pv = R_t @ K_inv @ np.transpose(pixel_RP2)
+    pixel_RP2 = [[pixel[0]], [pixel[1]], [1] ]
+    p0 = - R_t @ t
+    pv = R_t @ K_inv @ pixel_RP2
     return (p0, pv)
 
 
@@ -118,8 +118,8 @@ def video_thread(source, string_display, stop_event):
                 desenhar_centro(image, int(prediction['x']), int(prediction['y']), (0, 0, 255))
                 result_threads[string_display] = (prediction['x'], prediction['y'])
 
-        if reproj[string_display][2] != 0:
-            desenhar_centro(image, int(reproj[string_display][0]), int(reproj[string_display][1]), (255, 0, 0))
+        if reproj[string_display][2][0] != 0:
+            desenhar_centro(image, int(reproj[string_display][0][0]), int(reproj[string_display][1][0]), (255, 0, 0))
         cv2.imshow(string_display, image)
 
         # Verifica se a tecla 's' foi pressionada para salvar os resultados
@@ -132,28 +132,34 @@ def video_thread(source, string_display, stop_event):
     cap.release()
     cv2.destroyWindow(string_display)
 
+def err_reproj(pix, rep):
+    dif = np.array(pix) - np.array((rep.flatten()[0], rep.flatten()[1]))
+    return np.linalg.norm(dif) 
+
 def position_thread(stop_event):
     global result_threads
     global reproj
     while not stop_event.is_set():
         pixel_0 = result_threads[f"Camera_{source_0}-principal"]
         pixel_1 = result_threads[f"Camera_{source_1}-secundaria"]
-        reproj_0 = np.zeros(3)
-        reproj_1 = np.zeros(3)
+        reproj_0 = [[0],[0],[0]]
+        reproj_1 = [[0],[0],[0]]
         if pixel_0 != (0, 0) and pixel_1 != (0, 0):
-            reta0 = reta3D(K_0_inv, np.transpose(R_0), t_0, pixel_0)
-            reta1 = reta3D(K_1_inv, np.transpose(R_1), t_1, pixel_1)
+            R_0_T = np.transpose(R_0)
+            R_1_T = np.transpose(R_1)
+            reta0 = reta3D(K_0_inv, R_0_T, t_0, pixel_0)
+            reta1 = reta3D(K_1_inv, R_1_T, t_1, pixel_1)
             rec = ponto_medio_retas(reta0, reta1)
-            reproj_0 = K_0 @ (np.concatenate((R_0, t_0[:, np.newaxis]), axis=1) @ np.transpose([rec[0], rec[1], rec[2], 1]))
-            reproj_0 = reproj_0 / reproj_0[2]
-            reproj_1 = K_1 @ (np.concatenate((R_1, t_1[:, np.newaxis]), axis=1) @ np.transpose([rec[0], rec[1], rec[2], 1]))
-            reproj_1 = reproj_1 / reproj_1[2]
+            reproj_0 = (K_0 @ np.concatenate((R_0, t_0), axis=1)) @ np.vstack((rec, [1]))
+            reproj_0 = reproj_0 / reproj_0[2][0]
+            reproj_1 = (K_1 @ np.concatenate((R_1, t_1), axis=1)) @ np.vstack((rec, [1]))
+            reproj_1 = reproj_1 / reproj_1[2][0]
             reproj[f"Camera_{source_0}-principal"] = reproj_0
             reproj[f"Camera_{source_1}-secundaria"] = reproj_1
-            print(f"Ponto:{rec}, Reproj_{source_0}:{reproj_0}, Reproj_{source_1}:{reproj_1}")
+            print(f"Ponto:{rec.flatten()}, ErrReproj_{source_0}:{err_reproj(pixel_0, reproj_0)} pixels, ErrReproj_{source_1}:{err_reproj(pixel_0, reproj_0)} pixels")
         else:
-            reproj[f"Camera_{source_0}-principal"] = np.zeros(3)
-            reproj[f"Camera_{source_1}-secundaria"] = np.zeros(3)
+            reproj[f"Camera_{source_0}-principal"] = [[0],[0],[0]]
+            reproj[f"Camera_{source_1}-secundaria"] = [[0],[0],[0]]
 
         key = cv2.waitKey(1)
         if key & 0xFF == ord('q'):

@@ -9,10 +9,9 @@ def ponto_medio_retas(reta1, reta2):
     p_b = reta2[0]
     v_a = reta1[1]
     v_b = reta2[1]
-    v_axb = np.cross(v_a, v_b)
-
+    v_axb = np.cross(v_a.flatten(), v_b.flatten())
     p = p_b - p_a
-    S = np.column_stack((v_a, - v_b, v_axb))
+    S = np.column_stack((v_a.flatten(), - v_b.flatten(), v_axb.flatten()))
     lamb = np.linalg.solve(S, p)
     
     a = p_a + (lamb[0] * v_a)
@@ -20,9 +19,9 @@ def ponto_medio_retas(reta1, reta2):
     return (a + b)/2
 
 def reta3D(K_inv, R_t, t, pixel):
-    pixel_RP2 = [pixel[0], pixel[1], 1 ]
-    p0 = - R_t @ np.transpose(t)
-    pv = R_t @ K_inv @ np.transpose(pixel_RP2)
+    pixel_RP2 = [[pixel[0]], [pixel[1]], [1] ]
+    p0 = - R_t @ t
+    pv = R_t @ K_inv @ pixel_RP2
     return (p0, pv)
 
 # Configuração do argparse para receber parâmetros da linha de comando
@@ -91,18 +90,19 @@ Tx = U @ Z @ np.transpose(U)
 R1 = U @ W @ Vt
 R2 = U @ np.transpose(W) @ Vt
 
-t1 = U @ np.transpose([0, 0, 1])
+t1 = U @ np.atleast_2d([0, 0, 1]).T
 t2 = -t1
 
 R_f = None
 t_f = None
-Y_0 = reta3D(K_0_inv, np.eye(3), np.zeros(3), points_camera_0[0])
+Y_0 = reta3D(K_0_inv, np.eye(3), [[0],[0],[0]], points_camera_0[0])
 
 for R in (R1, R2):
     for t in (t1, t2):
-        Y = reta3D(K_1_inv, np.transpose(R), t, points_camera_1[0])
+        R_T = np.transpose(R)
+        Y = reta3D(K_1_inv, R_T, t, points_camera_1[0])
         rec = ponto_medio_retas(Y_0, Y)
-        rec_sec = np.transpose(R) @ np.transpose(rec - t)
+        rec_sec = R_T @ (rec - t)
         if rec[2] > 0 and rec_sec[2] > 0:
             R_f = R
             t_f = t
