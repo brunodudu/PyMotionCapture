@@ -4,6 +4,7 @@ from inference_sdk import InferenceHTTPClient
 import numpy as np
 import argparse
 import json
+from collections import deque
 
 with open("parameters.json", "r") as json_file:
     parameters = json.load(json_file)
@@ -48,8 +49,33 @@ with open(f"Calib-2/results/RotationMatrix.json", "r") as json_file:
 with open(f"Calib-2/results/PositionVector.json", "r") as json_file:
     t_1 = np.array(json.load(json_file), dtype=np.float64)
 
-K_0_inv = np.linalg.inv(K_0)
-K_1_inv = np.linalg.inv(K_1)
+def inv_K(K):
+    fx = K[0][0]
+    fy = K[1][1]
+    cx = K[0][2]
+    cy = K[1][2]
+    K_inv = np.array([[1/fx, 0, -cx/fx],
+             [0, 1/fy, -cy/fy],
+             [0, 0, 1]])
+    return K_inv
+
+K_0_inv = inv_K(K_0)
+inv_K(K_0)
+K_1_inv = inv_K(K_1)
+
+def cent_K(K):
+    fx = K[0][0]
+    fy = K[1][1]
+    K_cent = np.array([[fx, 0, 0],
+              [0, fy, 0],
+              [0, 0, 1]])
+    return K_cent
+
+def skew_symmetric(v):
+    x, y, z = v
+    return np.array([[0, -z, y],
+            [z, 0, -x],
+            [-y, x, 0]])
 
 def ponto_medio_retas(reta1, reta2):
     p_a = reta1[0]
@@ -71,6 +97,19 @@ def reta3D(K_inv, R_t, t, pixel):
     p0 = - R_t @ t
     pv = R_t @ K_inv @ pixel_RP2
     return (p0, pv)
+
+def fix_R(dif2D, K_inv):
+    dif = [[dif2D[0]], [dif2D[1]], [1]]
+    vec_dif = cent_K(K_inv) @ dif
+    vec_dif = vec_dif.flatten()
+    vec_dif = vec_dif / np.linalg.norm(vec_dif)
+    vec_forward = [0, 0, 1]
+    eix_rot = np.cross(vec_dif, vec_forward)
+    eix_rot = eix_rot / np.linalg.norm(eix_rot)
+    ang = np.arccos(np.dot(vec_dif, vec_forward))
+    eix_rot_M = skew_symmetric(eix_rot)
+    R_fix = np.eye(3) + np.sin(ang) * eix_rot_M + (1 - np.cos(ang)) * eix_rot_M @ eix_rot_M
+    return R_fix
 
 
 def desenhar_centro(image, center_x, center_y, cor):
@@ -139,6 +178,9 @@ def err_reproj(pix, rep):
 def position_thread(stop_event):
     global result_threads
     global reproj
+    global R_1
+    err_proj_window = deque(maxlen=10)
+    dif_reproj_pix_1_window = deque(maxlen=10)
     while not stop_event.is_set():
         pixel_0 = result_threads[f"Camera_{source_0}-principal"]
         pixel_1 = result_threads[f"Camera_{source_1}-secundaria"]
@@ -156,7 +198,18 @@ def position_thread(stop_event):
             reproj_1 = reproj_1 / reproj_1[2][0]
             reproj[f"Camera_{source_0}-principal"] = reproj_0
             reproj[f"Camera_{source_1}-secundaria"] = reproj_1
-            print(f"Ponto:{rec.flatten()}, ErrReproj_{source_0}:{err_reproj(pixel_0, reproj_0)} pixels, ErrReproj_{source_1}:{err_reproj(pixel_0, reproj_0)} pixels")
+            err_reproj_0 = err_reproj(pixel_0, reproj_0)
+            err_reproj_1 = err_reproj(pixel_1, reproj_1)
+            err_proj_window.append(err_reproj_1)
+            dif_reproj_pix_1_window.append(np.array((reproj_1.flatten()[0], reproj_1.flatten()[1])) - np.array(pixel_1))
+            print(f"Ponto:{rec.flatten()}, ErrReproj_{source_0}:{err_reproj_0} pixels, ErrReproj_{source_1}:{err_reproj_1} pixels")
+
+            err_mean = np.mean(np.array(err_proj_window))
+            dif_reproj_pix_1 = np.mean(np.array(dif_reproj_pix_1_window), axis=0)
+            if err_mean > 5 and len(err_proj_window) > 5:
+                R_1 = R_1 @ fix_R(dif_reproj_pix_1, K_1_inv)
+                err_proj_window.clear()
+                dif_reproj_pix_1_window.clear()
         else:
             reproj[f"Camera_{source_0}-principal"] = [[0],[0],[0]]
             reproj[f"Camera_{source_1}-secundaria"] = [[0],[0],[0]]

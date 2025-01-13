@@ -4,6 +4,16 @@ import json
 import argparse
 import os
 
+def inv_K(K):
+    fx = K[0][0]
+    fy = K[1][1]
+    cx = K[0][2]
+    cy = K[1][2]
+    K_inv = [[1/fx, 0, -cx/fx],
+             [0, 1/fy, -cy/fy],
+             [0, 0, 1]]
+    return K_inv
+
 def ponto_medio_retas(reta1, reta2):
     p_a = reta1[0]
     p_b = reta2[0]
@@ -58,9 +68,9 @@ with open(f"../Calib-1/results/camera_matrix_{source_1}.json", "r") as json_file
     K_1 = np.array(json.load(json_file), dtype=np.float64)
 
 
-K_0_inv = np.linalg.inv(K_0)
+K_0_inv = inv_K(K_0)
 K_1_T = np.transpose(K_1)
-K_1_inv = np.linalg.inv(K_1)
+K_1_inv = inv_K(K_1)
 
 points_camera_0 = []
 points_camera_1 = []
